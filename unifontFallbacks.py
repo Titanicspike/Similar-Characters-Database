@@ -9,7 +9,7 @@ FONT_STACK = [
     "NotoSerifHK-VF.otf",
     "HanaMinB.ttf",
     "BabelStoneHan.ttf",
-    "unifont-17.0.04.otf"
+#    "unifont-17.0.04.otf"
 ]
 
 FONT_SIZE = 48
@@ -65,6 +65,7 @@ def find_fallback_characters(loaded_faces, ranges, fallback_font_name=None):
             raise ValueError(f"fallback_font_name '{fallback_font_name}' not found in loaded_faces")
 
     fallback_chars = []
+    numGoodChars = 0
 
     for start, end in ranges:
         for code_point in range(start, end + 1):
@@ -73,11 +74,12 @@ def find_fallback_characters(loaded_faces, ranges, fallback_font_name=None):
             for font_path, face in loaded_faces:
                 if face.get_char_index(code_point) != 0:
                     selected_font_name = font_path
+                    numGoodChars += 1
                     break  # first font in stack that covers this code point wins
 
             if selected_font_name == fallback_font_name:
                 fallback_chars.append((code_point, chr(code_point)))
-
+    print(f"There will be this many characters scanned: {numGoodChars}")
     return fallback_chars
 
 

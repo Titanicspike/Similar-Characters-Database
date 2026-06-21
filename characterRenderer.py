@@ -3,9 +3,12 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 from paddleocr import TextRecognition
 import time
+from confusionMap import confusion_map, add_confusion, to_plain_dict
+import json
+import re
 
 # 1. Initialize PaddleOCR targeting ONLY the recognition submodule
-ocr = TextRecognition(model_name="PP-OCRv5_server_rec", device="gpu:0")
+ocr = TextRecognition(device="gpu:0")
 
 # 2. Prioritized Font Stack
 FONT_STACK = [
@@ -102,7 +105,9 @@ def apply_augmentation(base_canvas, blur_sigma=0.0, noise_std=0.0):
 
 
 def run_font_stack_ocr_pipeline(batch_size=128, augmentations=AUGMENTATION_CONFIGS):
+    startTime = time.time()
     t0 = time.time()
+    charN = 1
     batch_images = []
     batch_meta = []  # (char, augmentation_label) pairs, parallel to batch_images
 
@@ -113,10 +118,13 @@ def run_font_stack_ocr_pipeline(batch_size=128, augmentations=AUGMENTATION_CONFI
         t1 = time.time()
         predictions = ocr.predict(input=batch_images, batch_size=batch_size)
         t2 = time.time()
+        print(f"Number of Characters Proccessed: {charN}. Seconds per Character: {(time.time() - startTime) / charN}")
         print(f"augment: {t1-t0:.3f}s | predict: {t2-t1:.3f}s")
         for (original_char, aug_label), pred in zip(batch_meta, predictions):
-            print(f"{original_char} [{aug_label}]")
-            print(pred['rec_text'])
+            predChar = re.sub(r'[a-zA-Z0-9]', '', pred["rec_text"])
+            if len(predChar) > 0:
+                add_confusion(original_char, pred["rec_text"], pred["rec_score"])
+        
         batch_images.clear()
         batch_meta.clear()
         t0 = time.time()
@@ -162,10 +170,14 @@ def run_font_stack_ocr_pipeline(batch_size=128, augmentations=AUGMENTATION_CONFI
                     # Fire batch inference whenever the batch fills up
                     if len(batch_images) == batch_size:
                         flush_batch()
-
+            charN += 1
     # Flush remaining data in the final partial batch
     flush_batch()
+    print(f"Done processing {charN} characters!")
 
 
 if __name__ == "__main__":
     run_font_stack_ocr_pipeline(batch_size=512)
+    with open("similarCharacters.json", "w", encoding="utf-8") as f:
+        json.dump(to_plain_dict(confusion_map), f, ensure_ascii=False, indent=2)
+    print(f"Saved confusion map with {len(confusion_map)} source characters")
