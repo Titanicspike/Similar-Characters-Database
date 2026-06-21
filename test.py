@@ -8,7 +8,7 @@ FONT_STACK = [
     "NotoSerifTC-VF.otf",
     "NotoSerifHK-VF.otf",
     "HanaMinB.ttf",
-    "BabelStoneHan.tff",
+    "BabelStoneHan.ttf",
     "unifont-17.0.04.otf"
 ]
 
@@ -30,6 +30,10 @@ print("-" * 50)
 
 # Pre-allocate a single canvas matrix (White background)
 canvas = np.full((size, size, 3), 255, dtype=np.uint8)
+
+# Single set of augmentation settings applied once per run
+BLUR_SIGMA = 0
+NOISE_STD = 50
 
 
 def gaussian_kernel1d(sigma, radius=None):
@@ -66,6 +70,18 @@ def gaussian_blur(image, sigma=1.5):
 
     out = np.clip(out, 0, 255).astype(np.uint8)
     return out
+
+
+def add_gaussian_noise(image, std=15):
+    """Add additive Gaussian noise to a HxWx3 uint8 image."""
+    if std <= 0:
+        return image
+    h, w = image.shape[:2]
+    noise_2d = np.random.normal(0, std, (h, w)).astype(np.float32)
+    noise_3d = noise_2d[:, :, np.newaxis]  # broadcast same value to all channels
+    noisy = image.astype(np.float32) + noise_3d
+    return np.clip(noisy, 0, 255).astype(np.uint8)
+
 
 def test_single_character():
     # Prompt user for input
@@ -123,16 +139,17 @@ def test_single_character():
         else:
             print("⚠️ Warning: Character layout has no pixel footprint (whitespace character).")
 
-        # --- Display to Computer Screen (apply small Gaussian blur) ---
+        # --- Display to Computer Screen (apply blur once, then noise once) ---
         try:
-            blurred_canvas = gaussian_blur(canvas, sigma=2)
+            augmented_canvas = gaussian_blur(canvas, sigma=BLUR_SIGMA)
+            augmented_canvas = add_gaussian_noise(augmented_canvas, std=NOISE_STD)
         except NameError:
-            # If the blur helper isn't present for any reason, fall back to raw canvas
-            blurred_canvas = canvas
+            # If the augmentation helpers aren't present for any reason, fall back to raw canvas
+            augmented_canvas = canvas
 
         plt.figure(figsize=(4, 4))
-        plt.imshow(blurred_canvas)
-        plt.title(f"Rendered Box (sizexsize)\nChar: {char} (U+{code_point:04X})")
+        plt.imshow(augmented_canvas)
+        plt.title(f"Rendered Box (sizexsize)\nChar: {char} (U+{code_point:04X})\nblur={BLUR_SIGMA}, noise_std={NOISE_STD}")
         plt.axis('on')  # Shows pixel boundaries 0 to size
         plt.grid(color='gray', linestyle=':', linewidth=0.5)
         plt.show()
